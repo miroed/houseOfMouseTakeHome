@@ -50,7 +50,6 @@
       });
 
       $("body").on("keydown", function (event) {
-        event.preventDefault();
         const keyMap = {
           38: "up",
           40: "down",
@@ -59,6 +58,7 @@
         };
 
         if (Object.keys(keyMap).includes(`${event.which}`)) {
+          event.preventDefault();
           mouse.moveFocus(keyMap[`${event.which}`]);
 
           if (
