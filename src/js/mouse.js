@@ -6,7 +6,7 @@ function sanitizeHTML(str) {
   return str.replace(/[^\w. ]/gi, function (c) {
     return "&#" + c.charCodeAt(0) + ";";
   });
-};
+}
 
 // TODO: the following all do, basically, the same thing
 //  get the keys of some object and return some property
@@ -38,38 +38,41 @@ function getContent(content) {
   return content[contentKeys[0]].items;
 }
 
-
 /**
  * Callback function for IntersectionObserver in index.js
  * @param {*} categories
  * @param {*} observer
  */
 function categoryObserver(categories, observer) {
-	const self = this;
-	categories.forEach(function (category) {
-		const $category = $(category.target);
-		const $categoryId = parseInt($category.attr('id'), 10);
-		const $categoryRefId = $category.data("refId");
-		if (
-      category.isIntersecting
-      && category.intersectionRatio >= 0.6
-      && $categoryRefId
-    ) {
+  const self = this;
+  categories.forEach(function (category) {
+    const { target } = category;
+    const categoryId = target.id;
+    const categoryRefId = target.dataset.refId;
 
+    if (
+      category.isIntersecting &&
+      category.intersectionRatio >= 0.6 &&
+      categoryRefId
+    ) {
       fetch(
-        `https://cd-static.bamgrid.com/dp-117731241344/sets/${$categoryRefId}.json`
+        `https://cd-static.bamgrid.com/dp-117731241344/sets/${categoryRefId}.json`
       )
         .then((response) => response.json())
         .then(({ data }) => {
-					self.updateContent($categoryId, getContent(data));
-					self.populateContent($category.find('.category__list'), $categoryId);
-					$category.attr("data-category-item-count", getContent(data).length);
-				})
+          const numCategoryId = parseInt(target.id.split("-")[1], 10);
+          self.updateContent(numCategoryId, getContent(data));
+          self.populateContent(
+            target.querySelector(".category__list"),
+            categoryId
+          );
+          target.dataset.categoryItemCount = getContent(data).length;
+        })
         .catch((error) => console.log(error));
 
-      observer.unobserve($category[0]);
+      observer.unobserve(target);
     }
-	})
+  });
 }
 
 /**
@@ -101,7 +104,6 @@ function categoryItem(row, col, item) {
   `;
 }
 
-
 /**
  * Updates the currently active grid element
  *  based on the this.focusPoint array
@@ -114,31 +116,27 @@ function categoryItem(row, col, item) {
  */
 function updateFocus(direction, gridFocus, gridContent) {
   const directions = ["right", "left"]; // directions that affect scrolling within category
-  const $currentFocused = $(
-    `.category#${gridFocus[0]} li:nth-child(${gridFocus[1] + 1})`
+  const currentFocused = document.querySelector(
+    `#row-${gridFocus[0]}.category li:nth-child(${gridFocus[1] + 1})`
   );
-  const $firstItemInRow = $currentFocused
+  const itemsInRow = currentFocused
     .closest(".category__list")
-    .find(".category__item:first");
-  const $lastItemInRow = $currentFocused
-    .closest(".category__list")
-    .find(".category__item:last");
-  const currentCol = parseInt($currentFocused.data("gridCol"), 10);
-  const currentRow = parseInt($currentFocused.data("gridRow"), 10);
+    .querySelectorAll(".category__item");
+  const firstItemInRow = itemsInRow[0];
+  const lastItemInRow = itemsInRow[itemsInRow.length - 1];
+  const currentCol = parseInt(currentFocused.dataset.gridCol, 10);
+  const currentRow = parseInt(currentFocused.dataset.gridRow, 10);
   const getRowCount = parseInt(
-    $currentFocused.closest(".category").data("categoryItemCount"),
+    currentFocused.closest(".category").dataset.categoryItemCount,
     10
   );
 
-  if (
-    directions.includes(direction) 
-    && gridFocus[1] === 0 
-    && currentCol > 0
-  ) {
-    $lastItemInRow.remove();
-    $currentFocused
+  if (directions.includes(direction) && gridFocus[1] === 0 && currentCol > 0) {
+    lastItemInRow.remove();
+    currentFocused
       .closest(".category__list")
-      .prepend(
+      .insertAdjacentHTML(
+        "afterbegin",
         categoryItem(
           currentRow,
           currentCol - 1,
@@ -148,14 +146,15 @@ function updateFocus(direction, gridFocus, gridContent) {
   }
 
   if (
-    directions.includes(direction)
-    && gridFocus[1] === 4
-    && currentCol < (getRowCount - 1)
+    directions.includes(direction) &&
+    gridFocus[1] === 4 &&
+    currentCol < getRowCount - 1
   ) {
-    $firstItemInRow.remove();
-    $currentFocused
+    firstItemInRow.remove();
+    currentFocused
       .closest(".category__list")
-      .append(
+      .insertAdjacentHTML(
+        "beforeend",
         categoryItem(
           currentRow,
           currentCol + 1,
@@ -164,13 +163,16 @@ function updateFocus(direction, gridFocus, gridContent) {
       );
   }
 
-  $(".category__item").removeClass("category__item--focused");
+  document.querySelectorAll(".category__item").forEach((element) => {
+    element.classList.remove("category__item--focused");
+  });
 
-  $(`.category#${gridFocus[0]} li:nth-child(${gridFocus[1] + 1})`).addClass(
-    "category__item--focused"
-  );
+  document
+    .querySelector(
+      `.category#row-${gridFocus[0]} li:nth-child(${gridFocus[1] + 1})`
+    )
+    .classList.add("category__item--focused");
 }
-
 
 /**
  * Constructor function
@@ -206,48 +208,61 @@ Mouse.prototype.getContent = function () {
  */
 Mouse.prototype.populateContent = function (renderTo, contentKey) {
   let contentToPopulate = [];
-
   if (contentKey) {
-    for (const [index, item] of this.content[contentKey].entries()) {
+    const numContentKey = parseInt(contentKey.split("-")[1], 10);
+    for (const [index, item] of this.content[numContentKey].entries()) {
       if (index === 5) break;
-      contentToPopulate.push(categoryItem(contentKey, index, item));
+      contentToPopulate.push(categoryItem(numContentKey, index, item));
+    }
+
+    for (const content of contentToPopulate) {
+      renderTo.insertAdjacentHTML("beforeend", content);
     }
   } else {
     contentToPopulate = Object.keys(this.categories).map((key) => {
-      const $currentElement = $("<section>");
+      const currentElement = document.createElement("section");
+      currentElement.setAttribute("class", "category");
+      currentElement.setAttribute("id", `row-${key}`);
+      currentElement.setAttribute("tabindex", "-1");
+      currentElement.setAttribute(
+        "data-category-item-count",
+        this.content[key].length
+      );
+      if (this.categories[key].refId)
+        currentElement.setAttribute("data-ref-id", this.categories[key].refId);
+      if (this.categories[key].id)
+        currentElement.setAttribute("data-set-id", this.categories[key].id);
 
-      // setup category block
-      $currentElement.attr({
-        class: "category",
-        id: key,
-        tabindex: "-1",
-        "data-set-id": this.categories[key].id,
-        "data-ref-id": this.categories[key].refId,
-        "data-category-item-count": this.content[key].length,
-      })
-      .append(`
+      currentElement.insertAdjacentHTML(
+        "beforeend",
+        `
         <h3 class="category__name">${sanitizeHTML(
           this.categories[key].title
         )}</h3>
         <div class="category__content">
             <ul class="category__list"></ul>
         </div>
-      `);
-      
-      const $currentContentList = $currentElement.find(".category__list");
+      `
+      );
+
+      const currentContentList =
+        currentElement.querySelector(".category__list");
 
       for (const [index, item] of this.content[key].entries()) {
         if (index === 5) break;
-        $currentContentList.append(
+        currentContentList.insertAdjacentHTML(
+          "beforeend",
           categoryItem(parseInt(key, 10), index, item)
         );
       }
 
-      return $currentElement;
+      return currentElement;
     });
-  }
 
-  renderTo.append(contentToPopulate);
+    for (const content of contentToPopulate) {
+      renderTo.append(content);
+    }
+  }
 };
 
 /**
@@ -257,7 +272,7 @@ Mouse.prototype.populateContent = function (renderTo, contentKey) {
  */
 Mouse.prototype.updateContent = function (id, newContent) {
   this.content[id] = newContent;
-}
+};
 
 /**
  * Updates the focusPoint or the currently active selection
